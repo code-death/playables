@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Standard Playables</title>
+<meta name="description" content="Every Standard-legal print of the Pokémon TCG cards played in the current meta. Sort your bulk.">
+<style>
+  :root {
+    --bg: #f6f5f2; --surface: #ffffff; --text: #1c1b19; --muted: #6b6862;
+    --line: #e2dfd8; --accent: #c2410c; --accent-text: #ffffff; --chip: #ecebe6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141413; --surface: #1f1e1c; --text: #ecebe6; --muted: #9a968e;
+      --line: #33312d; --accent: #f97316; --accent-text: #141413; --chip: #2a2926;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .wrap { max-width: 1280px; margin: 0 auto; padding: 0 16px; }
+  header { padding: 28px 0 8px; }
+  h1 { margin: 0; font-size: 26px; letter-spacing: -0.01em; }
+  .sub { margin: 4px 0 0; color: var(--muted); }
+
+  .controls {
+    background: var(--bg); padding: 12px 0; border-bottom: 1px solid var(--line);
+    display: grid; gap: 10px;
+  }
+  @media (min-width: 900px) { .controls { position: sticky; top: 0; z-index: 5; } }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .label { color: var(--muted); font-size: 13px; min-width: 64px; }
+  input[type=search], select {
+    font: inherit; color: var(--text); background: var(--surface);
+    border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
+  }
+  input[type=search] { flex: 1 1 220px; min-width: 0; }
+  select { max-width: 100%; }
+  .chip {
+    font: inherit; font-size: 13px; color: var(--text); background: var(--chip);
+    border: 1px solid transparent; border-radius: 999px; padding: 5px 12px; cursor: pointer;
+  }
+  .chip[aria-pressed=true] { background: var(--accent); color: var(--accent-text); }
+  .count { color: var(--muted); font-size: 13px; margin-left: auto; }
+
+  .grid {
+    display: grid; gap: 14px; padding: 16px 0 32px;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  }
+  .tile {
+    all: unset; cursor: pointer; display: flex; flex-direction: column; gap: 6px;
+  }
+  .tile:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 8px; }
+  .tile img {
+    width: 100%; aspect-ratio: 63 / 88; border-radius: 6px; background: var(--chip);
+    display: block;
+  }
+  .meta { font-size: 12px; line-height: 1.3; }
+  .meta b { display: block; font-size: 13px; }
+  .meta span { color: var(--muted); }
+  .empty { color: var(--muted); padding: 40px 0; text-align: center; grid-column: 1 / -1; }
+
+  dialog {
+    border: 0; border-radius: 12px; padding: 0; max-width: min(760px, calc(100vw - 32px));
+    background: var(--surface); color: var(--text);
+  }
+  dialog::backdrop { background: rgba(0,0,0,.6); }
+  .detail { display: grid; grid-template-columns: minmax(0, 300px) 1fr; gap: 20px; padding: 20px; }
+  .detail img { width: 100%; border-radius: 10px; }
+  .detail h2 { margin: 0 0 2px; font-size: 20px; }
+  .detail table { width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 12px; }
+  .detail td { padding: 6px 0; border-bottom: 1px solid var(--line); }
+  .detail td.n { text-align: right; color: var(--muted); white-space: nowrap; padding-left: 12px; }
+  .close { position: absolute; top: 8px; right: 10px; }
+  @media (max-width: 560px) { .detail { grid-template-columns: 1fr; } }
+
+  footer { color: var(--muted); font-size: 13px; padding: 16px 0 40px; border-top: 1px solid var(--line); }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Standard Playables</h1>
+    <p class="sub">Every legal print of the cards played in the current Pokémon TCG meta (H · I · J). Pull these out of your bulk.</p>
+  </header>
+
+  <div class="controls">
+    <div class="row">
+      <input type="search" id="q" placeholder="Search card name…" aria-label="Search card name">
+      <select id="deck" aria-label="Deck"><option value="">All decks</option></select>
+      <select id="sort" aria-label="Sort">
+        <option value="score">Most played</option>
+        <option value="set">Set &amp; number</option>
+        <option value="name">Name</option>
+      </select>
+    </div>
+    <div class="row" id="cats"><span class="label">Type</span></div>
+    <div class="row" id="sets"><span class="label">Set</span></div>
+    <div class="row"><span class="count" id="count"></span></div>
+  </div>
+
+  <main class="grid" id="grid"></main>
+
+  <footer>
+    Data from <a href="https://limitlesstcg.com/decks" target="_blank" rel="noopener">Limitless TCG</a>
+    meta decks · updated <span id="updated">–</span>.
+    "Most played" = Σ (deck meta share × average copies). Not affiliated with The Pokémon Company.
+  </footer>
+</div>
+
+<dialog id="dlg">
+  <button class="chip close" id="close" aria-label="Close">✕</button>
+  <div class="detail" id="detail"></div>
+</dialog>
+
+<script>
+const CATS = ["Pokémon", "Item", "Supporter", "Tool", "Stadium", "Energy"];
+const state = { q: "", deck: "", sort: "score", cats: new Set(), sets: new Set() };
+let data, tiles = [];
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const fmt = (n) => String(Math.round(n * 10) / 10);
+
+fetch("data/cards.json").then((r) => r.json()).then(init).catch(() => {
+  $("grid").innerHTML = '<p class="empty">Could not load card data.</p>';
+});
+
+function init(json) {
+  data = json;
+  $("updated").textContent = new Date(data.updated).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+
+  // One tile per print; rank keeps the card's score order.
+  data.cards.forEach((card, rank) => card.prints.forEach((p) => tiles.push({ card, p, rank })));
+
+  for (const d of data.decks) $("deck").add(new Option(`${d.name} (${d.share}%)`, d.id));
+  chips($("cats"), CATS.filter((c) => data.cards.some((x) => x.category === c)), state.cats);
+  chips($("sets"), [...new Set(tiles.map((t) => t.p.set))].sort(), state.sets);
+
+  $("q").addEventListener("input", (e) => { state.q = e.target.value.trim().toLowerCase(); render(); });
+  $("deck").addEventListener("change", (e) => { state.deck = e.target.value; render(); });
+  $("sort").addEventListener("change", (e) => { state.sort = e.target.value; render(); });
+  $("close").addEventListener("click", () => $("dlg").close());
+  $("dlg").addEventListener("click", (e) => { if (e.target === $("dlg")) $("dlg").close(); });
+  render();
+}
+
+function chips(row, values, selected) {
+  for (const v of values) {
+    const b = document.createElement("button");
+    b.className = "chip"; b.textContent = v; b.setAttribute("aria-pressed", "false");
+    b.addEventListener("click", () => {
+      selected.has(v) ? selected.delete(v) : selected.add(v);
+      b.setAttribute("aria-pressed", String(selected.has(v)));
+      render();
+    });
+    row.appendChild(b);
+  }
+}
+
+function render() {
+  const deckId = Number(state.deck);
+  let list = tiles.filter(({ card, p }) =>
+    (!state.q || card.name.toLowerCase().includes(state.q)) &&
+    (!state.cats.size || state.cats.has(card.category)) &&
+    (!state.sets.size || state.sets.has(p.set)) &&
+    (!deckId || card.decks.some((d) => d.id === deckId)));
+
+  const bySet = (a, b) => a.p.set.localeCompare(b.p.set) || parseInt(a.p.num) - parseInt(b.p.num);
+  if (state.sort === "set") list.sort(bySet);
+  else if (state.sort === "name") list.sort((a, b) => a.card.name.localeCompare(b.card.name) || bySet(a, b));
+  else if (deckId) list.sort((a, b) => count(b.card, deckId) - count(a.card, deckId) || a.rank - b.rank);
+  else list.sort((a, b) => a.rank - b.rank);
+
+  const n = new Set(list.map((t) => t.card)).size;
+  $("count").textContent = `${list.length} print${list.length === 1 ? "" : "s"} · ${n} card${n === 1 ? "" : "s"}`;
+  $("grid").innerHTML = list.length ? "" : '<p class="empty">No cards match these filters.</p>';
+  const frag = document.createDocumentFragment();
+  for (const t of list) frag.appendChild(tile(t, deckId));
+  $("grid").appendChild(frag);
+}
+
+const count = (card, id) => (card.decks.find((d) => d.id === id) || { count: 0 }).count;
+
+function tile({ card, p }, deckId) {
+  const b = document.createElement("button");
+  b.className = "tile";
+  const decks = deckId ? card.decks.filter((d) => d.id === deckId) : card.decks.slice(0, 2);
+  const more = deckId ? "" : card.decks.length > 2 ? ` +${card.decks.length - 2}` : "";
+  b.innerHTML = `<img loading="lazy" src="${p.img}" alt="${esc(card.name)} ${p.set} ${p.num}">
+    <div class="meta"><b>${esc(card.name)}</b><span>${p.set} ${p.num} · ${decks.map((d) => `${esc(d.name)} ×${fmt(d.count)}`).join(", ")}${more}</span></div>`;
+  b.addEventListener("click", () => open(card, p));
+  return b;
+}
+
+function open(card, p) {
+  const share = Object.fromEntries(data.decks.map((d) => [d.id, d.share]));
+  const kind = card.ptype ? `${card.category} · ${card.ptype}` : card.category;
+  $("detail").innerHTML = `<img src="${p.img.replace("_SM.png", "_LG.png")}" alt="${esc(card.name)}">
+    <div><h2>${esc(card.name)}</h2><div class="sub">${esc(kind)} · ${p.set} ${p.num}</div>
+    <div class="sub">Legal prints: ${card.prints.map((x) => `${x.set} ${x.num}`).join(", ")}</div>
+    <table><tr><td><b>Played in</b></td><td class="n">avg copies</td><td class="n">meta share</td></tr>
+    ${card.decks.map((d) => `<tr><td>${esc(d.name)}</td><td class="n">×${fmt(d.count)}</td><td class="n">${share[d.id]}%</td></tr>`).join("")}
+    </table></div>`;
+  $("dlg").showModal();
+}
+</script>
+</body>
+</html>

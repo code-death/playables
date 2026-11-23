@@ -2,15 +2,15 @@
 played in the current meta."""
 
 import html
+import http.client
 import json
 import re
 import sys
 import time
-import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
-BASE = "https://limitlesstcg.com"
+HOST = "limitlesstcg.com"
 IMG = "https://limitlesstcg.nyc3.cdn.digitaloceanspaces.com/tpci/{set}/{set}_{num:0>3}_R_EN_SM.png"
 OUT = Path(__file__).parent / "data" / "cards.json"
 UA = "Mozilla/5.0 (compatible; playables-bot; +https://github.com/code-death/playables)"
@@ -100,20 +100,38 @@ def build_cards(decks, deck_cards, card_info, legal):
     return sorted(out, key=lambda c: -c["score"])
 
 
+_conn = None
+
+
 def fetch(path):
-    req = urllib.request.Request(BASE + path, headers={"User-Agent": UA})
-    with urllib.request.urlopen(req, timeout=30) as r:
-        body = r.read().decode("utf-8")
+    """GET a Limitless page over one reused HTTPS connection, 1 s apart."""
+    global _conn
+    for attempt in (1, 2):
+        if _conn is None:
+            _conn = http.client.HTTPSConnection(HOST, timeout=30)
+        try:
+            _conn.request("GET", path, headers={"User-Agent": UA})
+            r = _conn.getresponse()
+            body = r.read().decode("utf-8")
+            break
+        except (http.client.HTTPException, OSError):
+            _conn.close()
+            _conn = None  # server dropped the keep-alive connection; reconnect once
+            if attempt == 2:
+                raise
     time.sleep(1)
+    if r.status != 200:
+        raise RuntimeError(f"HTTP {r.status} for {path}")
     return body
 
 
 def main():
     legal = parse_standard_list(fetch("/cards?q=f%3Astandard+d%3Alist+show%3A5000"))
     decks = parse_decks(fetch("/decks"))
-    print(f"{len(legal)} legal prints, {len(decks)} decks")
+    print(f"{len(legal)} legal prints, {len(decks)} decks", flush=True)
     deck_cards, card_info = {}, {}
-    for deck in decks:
+    for i, deck in enumerate(decks, 1):
+        print(f"deck {i}/{len(decks)}: {deck['name']} ({len(card_info)} card prints known)", flush=True)
         try:
             deck_cards[deck["id"]] = parse_deck_cards(fetch(f"/decks/{deck['id']}/cards"))
         except Exception as e:
