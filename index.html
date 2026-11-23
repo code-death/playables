@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Standard Playables</title>
-<meta name="description" content="Every Standard-legal print of the Pokémon TCG cards played in the current meta. Sort your bulk.">
+<meta name="description" content="Every Standard-legal print of the Pokémon TCG cards played in the latest tournament decklists. Sort your bulk.">
 <style>
   :root {
     --bg: #f6f5f2; --surface: #ffffff; --text: #1c1b19; --muted: #6b6862;
@@ -85,7 +85,7 @@
 <div class="wrap">
   <header>
     <h1>Standard Playables</h1>
-    <p class="sub">Every legal print of the cards played in the current Pokémon TCG meta (H · I · J). Pull these out of your bulk.</p>
+    <p class="sub">Every legal print (H · I · J) of every card played in the latest <span id="nlists">500</span> Standard tournament decklists. Pull these out of your bulk.</p>
   </header>
 
   <div class="controls">
@@ -93,7 +93,7 @@
       <input type="search" id="q" placeholder="Search card name…" aria-label="Search card name">
       <select id="deck" aria-label="Deck"><option value="">All decks</option></select>
       <select id="sort" aria-label="Sort">
-        <option value="score">Most played</option>
+        <option value="played">Most played</option>
         <option value="set">Set &amp; number</option>
         <option value="name">Name</option>
       </select>
@@ -106,9 +106,10 @@
   <main class="grid" id="grid"></main>
 
   <footer>
-    Data from <a href="https://limitlesstcg.com/decks" target="_blank" rel="noopener">Limitless TCG</a>
-    meta decks · updated <span id="updated">–</span>.
-    "Most played" = Σ (deck meta share × average copies). Not affiliated with The Pokémon Company.
+    Data from <a href="https://limitlesstcg.com/decks/lists?format=standard" target="_blank" rel="noopener">Limitless TCG</a>
+    tournament decklists · updated <span id="updated">–</span>.
+    "% of lists" = share of those decklists playing at least one copy; "×" = average copies when played.
+    Not affiliated with The Pokémon Company.
   </footer>
 </div>
 
@@ -119,7 +120,7 @@
 
 <script>
 const CATS = ["Pokémon", "Item", "Supporter", "Tool", "Stadium", "Energy"];
-const state = { q: "", deck: "", sort: "score", cats: new Set(), sets: new Set() };
+const state = { q: "", deck: "", sort: "played", cats: new Set(), sets: new Set() };
 let data, tiles = [];
 
 const $ = (id) => document.getElementById(id);
@@ -132,12 +133,13 @@ fetch("data/cards.json").then((r) => r.json()).then(init).catch(() => {
 
 function init(json) {
   data = json;
+  $("nlists").textContent = data.lists;
   $("updated").textContent = new Date(data.updated).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
 
-  // One tile per print; rank keeps the card's score order.
+  // One tile per print; rank keeps the card's most-played order.
   data.cards.forEach((card, rank) => card.prints.forEach((p) => tiles.push({ card, p, rank })));
 
-  for (const d of data.decks) $("deck").add(new Option(`${d.name} (${d.share}%)`, d.id));
+  for (const d of data.decks) $("deck").add(new Option(`${d.name} (${d.lists} lists)`, d.name));
   chips($("cats"), CATS.filter((c) => data.cards.some((x) => x.category === c)), state.cats);
   chips($("sets"), [...new Set(tiles.map((t) => t.p.set))].sort(), state.sets);
 
@@ -162,49 +164,51 @@ function chips(row, values, selected) {
   }
 }
 
+const inDeck = (card, name) => card.decks.find((d) => d.name === name);
+
 function render() {
-  const deckId = Number(state.deck);
   let list = tiles.filter(({ card, p }) =>
     (!state.q || card.name.toLowerCase().includes(state.q)) &&
     (!state.cats.size || state.cats.has(card.category)) &&
     (!state.sets.size || state.sets.has(p.set)) &&
-    (!deckId || card.decks.some((d) => d.id === deckId)));
+    (!state.deck || inDeck(card, state.deck)));
 
   const bySet = (a, b) => a.p.set.localeCompare(b.p.set) || parseInt(a.p.num) - parseInt(b.p.num);
   if (state.sort === "set") list.sort(bySet);
   else if (state.sort === "name") list.sort((a, b) => a.card.name.localeCompare(b.card.name) || bySet(a, b));
-  else if (deckId) list.sort((a, b) => count(b.card, deckId) - count(a.card, deckId) || a.rank - b.rank);
+  else if (state.deck) list.sort((a, b) => inDeck(b.card, state.deck).lists - inDeck(a.card, state.deck).lists || a.rank - b.rank);
   else list.sort((a, b) => a.rank - b.rank);
 
   const n = new Set(list.map((t) => t.card)).size;
   $("count").textContent = `${list.length} print${list.length === 1 ? "" : "s"} · ${n} card${n === 1 ? "" : "s"}`;
   $("grid").innerHTML = list.length ? "" : '<p class="empty">No cards match these filters.</p>';
   const frag = document.createDocumentFragment();
-  for (const t of list) frag.appendChild(tile(t, deckId));
+  for (const t of list) frag.appendChild(tile(t));
   $("grid").appendChild(frag);
 }
 
-const count = (card, id) => (card.decks.find((d) => d.id === id) || { count: 0 }).count;
-
-function tile({ card, p }, deckId) {
+function tile({ card, p }) {
   const b = document.createElement("button");
   b.className = "tile";
-  const decks = deckId ? card.decks.filter((d) => d.id === deckId) : card.decks.slice(0, 2);
-  const more = deckId ? "" : card.decks.length > 2 ? ` +${card.decks.length - 2}` : "";
+  let usage = `${fmt(card.pct)}% of lists · ×${fmt(card.avg)}`;
+  if (state.deck) {
+    const d = inDeck(card, state.deck), total = data.decks.find((x) => x.name === state.deck).lists;
+    usage = `${d.lists}/${total} ${esc(state.deck)} lists · ×${fmt(d.avg)}`;
+  }
   b.innerHTML = `<img loading="lazy" src="${p.img}" alt="${esc(card.name)} ${p.set} ${p.num}">
-    <div class="meta"><b>${esc(card.name)}</b><span>${p.set} ${p.num} · ${decks.map((d) => `${esc(d.name)} ×${fmt(d.count)}`).join(", ")}${more}</span></div>`;
+    <div class="meta"><b>${esc(card.name)}</b><span>${p.set} ${p.num} · ${usage}</span></div>`;
   b.addEventListener("click", () => open(card, p));
   return b;
 }
 
 function open(card, p) {
-  const share = Object.fromEntries(data.decks.map((d) => [d.id, d.share]));
   const kind = card.ptype ? `${card.category} · ${card.ptype}` : card.category;
   $("detail").innerHTML = `<img src="${p.img.replace("_SM.png", "_LG.png")}" alt="${esc(card.name)}">
     <div><h2>${esc(card.name)}</h2><div class="sub">${esc(kind)} · ${p.set} ${p.num}</div>
+    <div class="sub">In ${card.lists} of ${data.lists} lists (${fmt(card.pct)}%), ×${fmt(card.avg)} on average</div>
     <div class="sub">Legal prints: ${card.prints.map((x) => `${x.set} ${x.num}`).join(", ")}</div>
-    <table><tr><td><b>Played in</b></td><td class="n">avg copies</td><td class="n">meta share</td></tr>
-    ${card.decks.map((d) => `<tr><td>${esc(d.name)}</td><td class="n">×${fmt(d.count)}</td><td class="n">${share[d.id]}%</td></tr>`).join("")}
+    <table><tr><td><b>Played in</b></td><td class="n">lists</td><td class="n">avg copies</td></tr>
+    ${card.decks.map((d) => `<tr><td>${esc(d.name)}</td><td class="n">${d.lists}</td><td class="n">×${fmt(d.avg)}</td></tr>`).join("")}
     </table></div>`;
   $("dlg").showModal();
 }

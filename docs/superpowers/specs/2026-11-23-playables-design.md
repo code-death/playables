@@ -73,3 +73,12 @@ Prices in UI, Japanese prints, Expanded, browsing all 3,596 legal cards.
 
 `scrape.py` parsing functions are tested against saved HTML fixtures (`tests/fixtures/`)
 with `unittest` (stdlib). The page is checked manually in a browser against the real JSON.
+
+## Revision 2026-11-23 — decklists instead of meta archetypes
+
+Source switched from `/decks` (25 archetypes, average counts) to the latest 500 Standard decklists
+(`/decks/lists?format=standard&show=500&page=N`, then `/decks/list/{id}`; same card markup). Lists
+can repeat across rows — dedupe by id. Per card: `lists`, `pct` (of decklists), `avg` copies when
+played, `decks[{name, lists, avg}]` by archetype name. Default sort: most lists. Fetching uses 4
+parallel keep-alive connections (Limitless latency flat to 4, ~3× worse at 8; no rate-limit headers
+seen) with backoff on 429/5xx. Full run ≈ 2 min.
