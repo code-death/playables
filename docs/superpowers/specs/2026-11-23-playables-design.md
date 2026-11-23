@@ -81,4 +81,4 @@ Source switched from `/decks` (25 archetypes, average counts) to the latest 500 
 can repeat across rows — dedupe by id. Per card: `lists`, `pct` (of decklists), `avg` copies when
 played, `decks[{name, lists, avg}]` by archetype name. Default sort: most lists. Fetching uses 4
 parallel keep-alive connections (Limitless latency flat to 4, ~3× worse at 8; no rate-limit headers
-seen) with backoff on 429/5xx. Full run ≈ 2 min.
+seen) with backoff on 429/5xx, capped at 10 req/s overall (uncapped, GitHub runners hit ~50 req/s). Full run ≈ 90 s on Actions, ≈ 2 min from India.

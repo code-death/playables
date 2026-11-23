@@ -81,5 +81,17 @@ class BuildTests(unittest.TestCase):
         self.assertTrue(c["prints"][0]["img"].endswith("/POR/POR_081_R_EN_SM.png"))
 
 
+class RateTests(unittest.TestCase):
+    def test_wait_turn_caps_rate_across_threads(self):
+        from concurrent.futures import ThreadPoolExecutor
+        import time
+        scrape._next_slot = 0.0
+        start = time.monotonic()
+        with ThreadPoolExecutor(4) as ex:
+            list(ex.map(lambda _: scrape.wait_turn(), range(11)))
+        # 11 starts at 10/s: the last one may begin no earlier than 1.0 s after the first.
+        self.assertGreaterEqual(time.monotonic() - start, 0.95)
+
+
 if __name__ == "__main__":
     unittest.main()

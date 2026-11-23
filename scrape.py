@@ -17,9 +17,11 @@ IMG = "https://limitlesstcg.nyc3.cdn.digitaloceanspaces.com/tpci/{set}/{set}_{nu
 OUT = Path(__file__).parent / "data" / "cards.json"
 UA = "Mozilla/5.0 (compatible; playables-bot; +https://github.com/code-death/playables)"
 LISTS = 500
-# Limitless serves ~6.5 req/s at 4 parallel connections with flat latency; 8 only adds
-# ~20% throughput while tripling latency (measured 2026-11-23). Stay at 4.
+# Limitless latency stays flat at 4 parallel connections and triples at 8 (measured
+# 2026-11-23). From GitHub runners 4 connections reach ~50 req/s, so also cap the overall
+# rate to keep the load polite.
 WORKERS = 4
+MAX_RATE = 10  # requests per second, across all threads
 MIN_CARDS, MIN_LISTS = 100, 100
 TRAINER_KINDS = {"Item": "Item", "Supporter": "Supporter", "Stadium": "Stadium", "Pokémon Tool": "Tool"}
 
@@ -118,6 +120,18 @@ def build_cards(lists, list_cards, card_info, legal):
 
 
 _local = threading.local()
+_rate_lock = threading.Lock()
+_next_slot = 0.0
+
+
+def wait_turn():
+    """Space request starts at least 1/MAX_RATE seconds apart across threads."""
+    global _next_slot
+    with _rate_lock:
+        now = time.monotonic()
+        slot = max(now, _next_slot)
+        _next_slot = slot + 1 / MAX_RATE
+    time.sleep(slot - now)
 
 
 def fetch(path):
@@ -128,6 +142,7 @@ def fetch(path):
             time.sleep(5 * 2 ** attempt)
         conn = getattr(_local, "conn", None) or http.client.HTTPSConnection(HOST, timeout=30)
         _local.conn = conn
+        wait_turn()
         try:
             conn.request("GET", path, headers={"User-Agent": UA})
             r = conn.getresponse()
